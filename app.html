@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>落字 · 课堂笔记</title>
+<meta name="description" content="拍照速记、录音转写、双链笔记，把一节课落成能复习的笔记。">
+<meta name="theme-color" content="#0c1814">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="落字">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="app.css">
+<script>
+/* 运行时错误落到 data-err，便于排查（不影响界面） */
+window.addEventListener('error', function (e) {
+  document.documentElement.setAttribute('data-err', (e.message || 'error') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  var r = e.reason;
+  document.documentElement.setAttribute('data-err', 'REJ ' + (r && (r.stack || r.message) ? (r.stack || r.message) : String(r)));
+});
+</script>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">落</div>
+      <div>落字<small>LUOZI</small></div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <button class="nav-item" data-route="today"><span class="ico">◐</span>今日<span class="badge" id="badge-today" hidden></span></button>
+      <button class="nav-item" data-route="schedule"><span class="ico">▤</span>课表</button>
+      <button class="nav-item" data-route="inbox"><span class="ico">▣</span>收件箱<span class="badge" id="badge-inbox" hidden></span></button>
+      <button class="nav-item" data-route="notes"><span class="ico">✎</span>笔记</button>
+      <button class="nav-item" data-route="unknown"><span class="ico">?</span>不懂清单<span class="badge" id="badge-unknown" hidden></span></button>
+      <div class="nav-sep"></div>
+      <button class="nav-item" data-route="graph"><span class="ico">◈</span>知识图谱</button>
+      <button class="nav-item" data-route="settings"><span class="ico">⚙</span>设置</button>
+    </nav>
+
+    <div class="side-foot">
+      <div class="install-card" id="install-card">
+        <b>装到桌面</b>
+        <span id="install-hint">装好后可离线打开，像本地软件一样用。</span>
+        <button class="btn btn-primary btn-sm" id="btn-install">安装落字</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1 id="page-title">今日</h1>
+      <div class="sp"></div>
+      <label class="search-box">
+        <span style="color:var(--faint);font-size:13px">⌕</span>
+        <input id="global-search" type="search" placeholder="搜索笔记、转写…" autocomplete="off">
+        <kbd>⌘K</kbd>
+      </label>
+      <button class="btn btn-sm" id="btn-quick" title="新建速记">＋ 速记</button>
+    </div>
+
+    <div class="view-wrap" id="view-wrap"></div>
+  </main>
+</div>
+
+<div class="tabbar">
+  <div class="inner">
+    <button class="tab-btn" data-route="today"><span class="ico">◐</span>今日</button>
+    <button class="tab-btn" data-route="schedule"><span class="ico">▤</span>课表</button>
+    <button class="tab-btn" data-route="inbox"><span class="ico">▣</span>收件箱</button>
+    <button class="tab-btn" data-route="notes"><span class="ico">✎</span>笔记</button>
+    <button class="tab-btn" data-route="unknown"><span class="ico">?</span>不懂<span class="badge" id="badge-unknown-m" hidden></span></button>
+    <button class="tab-btn" data-route="settings"><span class="ico">⚙</span>设置</button>
+  </div>
+</div>
+
+<button class="fab" id="fab" title="新建">＋</button>
+
+<div class="sheet-mask" id="sheet-mask">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<div class="lightbox" id="lightbox"><img alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script src="core.js"></script>
+<script src="db.js"></script>
+<script src="media.js"></script>
+<script src="docs.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

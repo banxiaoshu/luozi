@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>落字 · 把听不懂的那几分钟留住</title>
+<meta name="description" content="落字是给大学生用的课堂笔记工具：拍板书取字、把 PPT 和 PDF 课件导进来、录没听懂的那段、识别课表截图、写带公式和双链的笔记，再把没弄懂的地方圈出来。不用注册，数据只存在你自己的设备上。">
+<meta name="theme-color" content="#0c1814">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+:root {
+  --hue: 159;
+  --bg: hsl(159 20% 7%);
+  --bg-soft: hsl(159 17% 9%);
+  --panel: hsl(159 15% 11%);
+  --line: hsl(159 13% 18%);
+  --line-soft: hsl(159 13% 15%);
+  --ink: hsl(159 18% 93%);
+  --muted: hsl(159 9% 62%);
+  --faint: hsl(159 8% 44%);
+  --mint: hsl(159 52% 62%);
+  --mint-soft: hsl(159 40% 30%);
+  --mint-deep: hsl(159 45% 18%);
+  --warn: hsl(32 70% 62%);
+  --r: 14px;
+  --maxw: 1080px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 背景一层极淡的光，别用花哨渐变 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(900px 520px at 78% -8%, hsl(159 45% 26% / .30), transparent 62%),
+    radial-gradient(680px 420px at 4% 8%, hsl(159 40% 20% / .22), transparent 60%);
+}
+body > * { position: relative; z-index: 1; }
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+img { max-width: 100%; height: auto; display: block; }
+a { color: inherit; text-decoration: none; }
+
+/* ---------------- 顶部 ---------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: saturate(140%) blur(14px);
+  background: hsl(159 20% 7% / .78);
+  border-bottom: 1px solid transparent;
+  transition: border-color .25s, background .25s;
+}
+.topbar.stuck { border-bottom-color: var(--line-soft); }
+.topbar .wrap {
+  height: 62px; display: flex; align-items: center; gap: 18px;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: .01em; }
+.brand .mark {
+  width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  background: linear-gradient(150deg, hsl(159 46% 34%), hsl(159 42% 22%));
+  color: hsl(159 60% 90%); font-size: 15px; font-weight: 700;
+  box-shadow: inset 0 1px 0 hsl(159 60% 70% / .25);
+}
+.brand small { display: block; font-size: 9px; letter-spacing: .22em; color: var(--faint); font-weight: 500; margin-top: -3px; }
+.topnav { display: flex; gap: 4px; margin-left: 14px; }
+.topnav a {
+  font-size: 13px; color: var(--muted); padding: 7px 11px; border-radius: 8px;
+  transition: color .2s, background .2s;
+}
+.topnav a:hover { color: var(--ink); background: hsl(159 15% 14%); }
+.topbar .sp { flex: 1; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 42px; padding: 0 20px; border-radius: 11px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); font-size: 13.5px; font-weight: 550;
+  cursor: pointer; font-family: inherit; white-space: nowrap;
+  transition: transform .16s, background .2s, border-color .2s, box-shadow .2s;
+}
+.btn:hover { background: hsl(159 15% 14%); border-color: hsl(159 13% 26%); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: linear-gradient(160deg, hsl(159 48% 58%), hsl(159 44% 46%));
+  border-color: hsl(159 45% 52%); color: hsl(159 60% 10%); font-weight: 650;
+  box-shadow: 0 8px 22px -12px hsl(159 60% 40% / .9), inset 0 1px 0 hsl(159 70% 80% / .45);
+}
+.btn-primary:hover { background: linear-gradient(160deg, hsl(159 52% 64%), hsl(159 46% 50%)); border-color: hsl(159 50% 58%); }
+.btn-sm { height: 34px; padding: 0 14px; font-size: 12.5px; border-radius: 9px; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn-ghost:hover { color: var(--ink); background: hsl(159 15% 13%); }
+
+/* ---------------- Hero ---------------- */
+.hero { padding: 72px 0 34px; }
+.hero .grid {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 34px;
+}
+.hero-copy { max-width: 720px; margin: 0 auto; text-align: center; }
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11.5px; letter-spacing: .1em; color: var(--mint);
+  border: 1px solid var(--mint-soft); background: hsl(159 40% 14% / .6);
+  padding: 5px 12px; border-radius: 999px; margin-bottom: 22px;
+}
+.eyebrow i { width: 5px; height: 5px; border-radius: 50%; background: var(--mint); display: block; }
+.hero h1 {
+  margin: 0 0 18px; font-size: clamp(30px, 3.6vw, 46px); line-height: 1.24;
+  letter-spacing: -.02em; font-weight: 680;
+}
+.hero h1 em { font-style: normal; color: var(--mint); }
+.hero .lead {
+  margin: 0 0 26px; font-size: 15.5px; color: var(--muted); line-height: 1.85; max-width: 30em;
+}
+.hero .cta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: center; }
+.hero .micro { margin: 16px 0 0; font-size: 12px; color: var(--faint); line-height: 1.7; }
+.hero .micro b { color: var(--mint); font-weight: 550; }
+
+.hero-shot { position: relative; }
+.hero-shot .frame {
+  position: relative; border-radius: 16px; overflow: hidden; border: 1px solid var(--line);
+  background: var(--panel); max-height: 452px;
+  box-shadow: 0 40px 90px -50px #000, 0 0 0 1px hsl(159 30% 40% / .06);
+}
+/* 底部渐隐，让窗口自然落进页面，而不是一刀切断 */
+.hero-shot .frame::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 120px;
+  background: linear-gradient(to bottom, hsl(159 20% 7% / 0), var(--bg) 88%);
+  pointer-events: none;
+}
+.hero-shot .frame img { width: 100%; }
+.hero-shot .badge {
+  position: absolute; left: 18px; bottom: 16px;
+  background: hsl(159 18% 12% / .92); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 13px; font-size: 11.5px; color: var(--muted);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 12px 30px -18px #000;
+}
+.hero-shot .badge b { color: var(--mint); font-weight: 600; }
+
+/* ---------------- 痛点 ---------------- */
+.pain { padding: 46px 0 18px; }
+.sec-head { margin-bottom: 26px; }
+.sec-head h2 { margin: 0 0 8px; font-size: 21px; letter-spacing: -.01em; font-weight: 620; }
+.sec-head p { margin: 0; color: var(--muted); font-size: 14px; }
+.pain-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.pain-card {
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--r);
+  padding: 20px 20px 22px;
+}
+.pain-card .n {
+  font-size: 11px; color: var(--faint); letter-spacing: .12em; margin-bottom: 10px;
+}
+.pain-card q {
+  display: block; font-size: 15px; line-height: 1.7; color: var(--ink); quotes: none;
+}
+.pain-card q::before { content: "「"; color: var(--faint); }
+.pain-card q::after { content: "」"; color: var(--faint); }
+.pain-card .then { margin-top: 12px; font-size: 12.5px; color: var(--muted); line-height: 1.75; }
+
+/* ---------------- 功能 ---------------- */
+.features { padding: 54px 0 10px; }
+.feat {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px;
+  padding: 34px 0 40px; border-top: 1px solid var(--line-soft);
+}
+.feat:first-of-type { border-top: none; }
+/* 文案区：标题/引言在一边，三条要点在另一边，左右交错出节奏 */
+.feat-copy {
+  display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr);
+  column-gap: 52px; align-items: center;
+}
+.feat-copy > * { grid-column: 1; }
+.feat-copy > ul { grid-column: 2; grid-row: 1 / span 4; align-self: center; }
+.feat.flip .feat-copy > * { grid-column: 2; }
+.feat.flip .feat-copy > ul { grid-column: 1; }
+.feat .kicker {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  font-size: 11.5px; letter-spacing: .1em; color: var(--faint);
+}
+.feat .kicker b {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; color: var(--mint); font-weight: 600;
+}
+.feat h3 { margin: 0 0 10px; font-size: 24px; letter-spacing: -.015em; font-weight: 650; }
+.feat p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.85; max-width: 34em; }
+.feat ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+.feat li { position: relative; padding-left: 18px; font-size: 13.5px; color: var(--muted); line-height: 1.75; }
+.feat li::before {
+  content: ""; position: absolute; left: 0; top: 9px;
+  width: 6px; height: 6px; border-radius: 2px; background: var(--mint-soft);
+}
+.feat li b { color: var(--ink); font-weight: 550; }
+.feat code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .88em; padding: 1px 5px; border-radius: 5px;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  color: var(--ink); white-space: nowrap;
+}
+.feat-shot .frame {
+  border-radius: var(--r); overflow: hidden; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: 0 30px 70px -46px #000;
+}
+.frame picture { display: block; }
+.feat-shot .frame img { width: 100%; }
+.feat-shot .cap {
+  margin-top: 10px; font-size: 11.5px; color: var(--faint); line-height: 1.6;
+}
+.feat-shot.phone { position: relative; }
+.feat-shot.phone::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 54% 52% at 50% 50%, hsl(159 42% 24% / .34), transparent 72%);
+}
+.feat-shot.phone .frame { max-width: 320px; margin: 0 auto; position: relative; }
+.feat-shot.phone .cap { text-align: center; }
+
+/* ---------------- 手机展示 ---------------- */
+.mobile { padding: 60px 0 30px; border-top: 1px solid var(--line-soft); }
+.phones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 28px; }
+.phones figure { margin: 0; }
+.phones .frame {
+  border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: 0 30px 60px -44px #000;
+}
+.phones figcaption { margin-top: 12px; font-size: 12px; color: var(--faint); text-align: center; }
+
+/* ---------------- 原则 ---------------- */
+.principles { padding: 52px 0 20px; }
+.principle-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.pr-card {
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--r);
+  padding: 22px 22px 24px;
+}
+.pr-card h4 { margin: 0 0 8px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+.pr-card h4 span {
+  width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--mint-deep); color: var(--mint); font-size: 12px;
+}
+.pr-card p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.8; }
+
+/* ---------------- 安装 ---------------- */
+.install {
+  margin: 56px 0 0; padding: 40px 0 56px; border-top: 1px solid var(--line-soft);
+}
+.install-card {
+  border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+  background:
+    radial-gradient(700px 300px at 12% 0%, hsl(159 42% 18% / .8), transparent 60%),
+    var(--bg-soft);
+  padding: 34px 34px 36px;
+}
+.install-card h2 { margin: 0 0 8px; font-size: 22px; font-weight: 640; letter-spacing: -.01em; }
+.install-card > p { margin: 0 0 22px; color: var(--muted); font-size: 14px; max-width: 44em; }
+.plats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+.plat {
+  background: hsl(159 18% 10% / .7); border: 1px solid var(--line-soft);
+  border-radius: 12px; padding: 16px 16px 18px;
+}
+.plat .os { font-size: 12px; color: var(--mint); letter-spacing: .06em; margin-bottom: 8px; font-weight: 550; }
+.plat ol { margin: 0; padding-left: 16px; font-size: 12.5px; color: var(--muted); line-height: 1.85; }
+.plat ol li::marker { color: var(--faint); }
+.install-note {
+  font-size: 12px; color: var(--faint); line-height: 1.75; margin: 0;
+}
+.install-note b { color: var(--muted); font-weight: 550; }
+.install-cta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.install-cta .btn { margin: 0; }
+
+/* ---------------- 页脚 ---------------- */
+.foot {
+  border-top: 1px solid var(--line-soft); padding: 30px 0 44px;
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  font-size: 12px; color: var(--faint);
+}
+.foot .sp { flex: 1; }
+.foot a { color: var(--muted); }
+.foot a:hover { color: var(--ink); }
+
+/* ---------------- 安装提示条 ---------------- */
+.snack {
+  position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 20px);
+  background: hsl(159 20% 12%); border: 1px solid var(--line);
+  border-radius: 12px; padding: 13px 18px; font-size: 13px; color: var(--ink);
+  box-shadow: 0 20px 50px -22px #000; opacity: 0; pointer-events: none;
+  transition: opacity .22s, transform .22s; max-width: calc(100vw - 40px);
+  line-height: 1.65; z-index: 90;
+}
+.snack.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------------- 移动端 ---------------- */
+@media (max-width: 900px) {
+  .hero { padding: 42px 0 20px; }
+  .hero .grid { grid-template-columns: 1fr; gap: 34px; }
+  .pain-grid { grid-template-columns: 1fr; }
+  .feat { gap: 20px; padding: 30px 0 34px; }
+  .feat-copy { grid-template-columns: minmax(0, 1fr); column-gap: 0; row-gap: 14px; }
+  .feat-copy > *, .feat.flip .feat-copy > * { grid-column: 1; }
+  .feat-copy > ul, .feat.flip .feat-copy > ul { grid-column: 1; grid-row: auto; }
+  .feat p { max-width: none; }
+  /* 手机上换成竖版截图，按手机宽度收窄，别拉满整屏 */
+  .feat-shot .frame { max-width: 310px; margin: 0 auto; }
+  .feat-shot.land .frame { max-width: none; }
+  .mobile { display: none; }
+  .principle-grid { grid-template-columns: 1fr; }
+  .plats { grid-template-columns: 1fr; }
+  .phones { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .topnav { display: none; }
+  .topbar .wrap { height: 56px; }
+  .hero-shot .badge { left: 8px; bottom: 8px; }
+}
+@media (max-width: 620px) {
+  .wrap { padding: 0 18px; }
+  .hero h1 { font-size: 28px; }
+  .hero .cta .btn { flex: 1; }
+  .phones { grid-template-columns: 1fr; gap: 28px; }
+  .phones .frame { max-width: 280px; margin: 0 auto; }
+  .install-card { padding: 24px 20px 26px; }
+  .brand small { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar">
+  <div class="wrap">
+    <a class="brand" href="./">
+      <span class="mark">落</span>
+      <span>落字<small>LUOZI</small></span>
+    </a>
+    <nav class="topnav">
+      <a href="#pain">为什么</a>
+      <a href="#how">功能</a>
+      <a href="#local">数据</a>
+      <a href="#install">安装</a>
+    </nav>
+    <div class="sp"></div>
+    <button class="btn btn-primary btn-sm" data-install>装到桌面</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ Hero ============ -->
+  <section class="hero">
+    <div class="wrap grid">
+      <div class="hero-copy">
+        <span class="eyebrow"><i></i>课堂笔记 · 免注册 · 纯本地</span>
+        <h1>把<em>听不懂的那几分钟</em><br>留住</h1>
+        <p class="lead">
+          老师有口音、板书擦得太快、一走神就断线——落字不解决讲课质量，
+          它只负责让你没跟上的那一段，课后还能捡回来。
+        </p>
+        <div class="cta">
+          <button class="btn btn-primary" data-install>装到桌面</button>
+          <a class="btn btn-ghost" href="#how">它到底能干什么 ↓</a>
+        </div>
+        <p class="micro" id="install-hint">
+          装完之后像本地软件一样常驻，<b>没网也能记</b>。数据全部存在你自己的设备上。
+        </p>
+      </div>
+      <div class="hero-shot">
+        <div class="frame">
+          <picture><source media="(max-width: 700px)" srcset="shots/m-today.jpg" width="720" height="1558"><img src="shots/today.jpg" width="1560" height="1020" alt="落字的今日页：显示当天课程、今日新笔记数和最近编辑的笔记"></picture>
+        </div>
+        <div class="badge">第 7 周 · 今天 2 节课 · <b>6 篇笔记</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 痛点 ============ -->
+  <section class="pain" id="pain">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>一节课 90 分钟，真正卡住你的可能只有三个地方</h2>
+        <p>不是不会学，是当场没接上。而笔记软件大多在解决"整理"，不解决"接上"。</p>
+      </div>
+      <div class="pain-grid">
+        <div class="pain-card">
+          <div class="n">01</div>
+          <q>老师说「数劣」，你以为是新概念</q>
+          <div class="then">其实是「数列」。等你反应过来，已经讲到下一节了。</div>
+        </div>
+        <div class="pain-card">
+          <div class="n">02</div>
+          <q>低头抄两行，抬头换了一屏</q>
+          <div class="then">板书擦得比手速快。抄下来的永远是半截。</div>
+        </div>
+        <div class="pain-card">
+          <div class="n">03</div>
+          <q>课上听懂了，课后翻笔记一脸空白</q>
+          <div class="then">笔记只有半页，复习时连当时哪里没懂都想不起来。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 功能 ============ -->
+  <section class="features" id="how">
+    <div class="wrap">
+
+      <div class="feat">
+        <div class="feat-copy">
+          <div class="kicker"><b>01</b> 拍照速记</div>
+          <h3>拍板书，顺便把字抠出来</h3>
+          <p>
+            相册里堆三百张板书照片，和没拍一样。落字把每张图直接挂在那节课的笔记下面，
+            压到 1600px，能看清又不占地方。
+          </p>
+          <ul>
+            <li>现拍和<b>从相册上传是同一个按钮</b>，一次可以选多张；电脑上就是普通选文件</li>
+            <li>拍完 <b>自动压缩</b>，一张板书图约 15KB，不心疼存储</li>
+            <li>点图上的「取字」，<b>在本机把图上文字识出来</b>，直接并进正文</li>
+            <li>识别引擎和中文模型都在本地，不走任何服务器</li>
+          </ul>
+        </div>
+        <div class="feat-shot land">
+          <div class="frame">
+            <picture><source media="(max-width: 700px)" srcset="shots/m-ocr.jpg" width="720" height="543"><img src="shots/ocr.jpg" width="1560" height="1020" alt="在笔记里对一张板书图片执行「取字」，识别结果出现在弹层中"></picture>
+          </div>
+          <div class="cap">识别结果先给你看，确认了才写进笔记。</div>
+        </div>
+      </div>
+
+      <div class="feat flip">
+        <div class="feat-copy">
+          <div class="kicker"><b>02</b> 课件</div>
+          <h3>PPT 和 PDF 丢进来，一页一个小标题</h3>
+          <p>
+            老师的课件在群文件里躺了一学期也没打开过。把整份课件拖进来，
+            它在你的浏览器里把文字抽出来，一张幻灯片一个小标题，正文已经排好了。
+          </p>
+          <ul>
+            <li>认 <b>.pptx</b> 和 <b>.pdf</b>，单份 20MB 以内，<b>整份文件不上传</b></li>
+            <li><b>中文 PDF 也抽得出</b>，不是只认英文；公式框架的文字照样进正文</li>
+            <li>图片版 PDF 会老实告诉你「这是扫描件、没文字层」，再让你<b>逐页识别</b></li>
+            <li>原文件挂在附件里，想对格式随时翻原版</li>
+          </ul>
+        </div>
+        <div class="feat-shot land">
+          <div class="frame">
+            <picture><source media="(max-width: 700px)" srcset="shots/m-doc.jpg" width="720" height="1558"><img src="shots/doc.jpg" width="1560" height="1020" alt="导入一份 PPTX 后生成的笔记：每张幻灯片变成一个二级标题，底部附件区挂着原始的 PPT 文件，可以打开或删除"></picture>
+          </div>
+          <div class="cap">三张幻灯片进来就是三条小标题，原文件还挂在这儿。</div>
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="feat-copy">
+          <div class="kicker"><b>03</b> 录音</div>
+          <h3>只录听不懂的那一段</h3>
+          <p>
+            整节课录下来，你也不会听第二遍。听到卡住的地方按一下，录三十秒，
+            回来再听那几句就够了。
+          </p>
+          <ul>
+            <li>录音带<b>实时波形</b>，一眼看出有没有录进去</li>
+            <li>存成 opus，一分钟不到 0.5MB</li>
+            <li>可以转成文字贴在笔记里：用浏览器内置识别，或你自己的 Whisper 接口</li>
+          </ul>
+        </div>
+        <div class="feat-shot land">
+          <div class="frame">
+            <picture><source media="(max-width: 700px)" srcset="shots/m-recorder.jpg" width="720" height="567"><img src="shots/recorder.jpg" width="1560" height="1020" alt="录音面板：计时、实时电平波形、暂停与取消"></picture>
+          </div>
+          <div class="cap">录音前会提示征得老师和同学同意。音频只存在这台设备上。</div>
+        </div>
+      </div>
+
+      <div class="feat flip">
+        <div class="feat-copy">
+          <div class="kicker"><b>04</b> 课表</div>
+          <h3>贴一段文字，或者直接传张截图</h3>
+          <p>
+            教务系统那种表格截图，不用手动敲。丢进来，它在本机把课程、星期、时间、教室拆出来，
+            先给你核对，确认了才写进课表。
+          </p>
+          <ul>
+            <li>认「周一 08:30-10:00 高等数学 A301」，也认「第 3-4 节」</li>
+            <li><b>截图识别也是本地的</b>，表头自动跳过，认不准的行会单独列出来</li>
+            <li>课表按周次算，今天第几周、接下来是哪节课，直接摆在今日页</li>
+          </ul>
+        </div>
+        <div class="feat-shot">
+          <div class="frame">
+            <picture><source media="(max-width: 700px)" srcset="shots/m-schedule.jpg" width="720" height="1558"><img src="shots/schedule.jpg" width="1560" height="1020" alt="落字的周课表：按时间轴排列的彩色课程块，下面是课程列表"></picture>
+          </div>
+          <div class="cap">每门课一个颜色，一周什么节奏一眼看清。</div>
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="feat-copy">
+          <div class="kicker"><b>05</b> 笔记</div>
+          <h3>公式能真排版，笔记之间能串起来</h3>
+          <p>
+            左边写 Markdown，右边立刻出效果。<code>$a_n \le b_n \le c_n$</code>
+            这种会排成真正的数学式，不是一行源码。
+          </p>
+          <ul>
+            <li>写 <b>[[另一篇的名字]]</b> 就串起来了，那篇笔记里会自动多一条反向链接</li>
+            <li>公式、引用、任务列表、代码块都支持，<b>不用联网加载</b></li>
+            <li>同一篇笔记可以挂图片和录音，都在这一个页面里</li>
+          </ul>
+        </div>
+        <div class="feat-shot">
+          <div class="frame">
+            <picture><source media="(max-width: 700px)" srcset="shots/m-note.jpg" width="720" height="1558"><img src="shots/note.jpg" width="1560" height="1020" alt="笔记编辑页：左边 Markdown 源码，右边实时预览公式与引用，下方是附件和反向链接"></picture>
+          </div>
+          <div class="cap">右边那段公式是真的排版出来的，不是图片。</div>
+        </div>
+      </div>
+
+      <div class="feat flip">
+        <div class="feat-copy">
+          <div class="kicker"><b>06</b> 标不懂</div>
+          <h3>没懂的那句，当场圈出来</h3>
+          <p>
+            下课那一秒你是知道哪里没懂的，第二天就忘了。在笔记里选中那几个字，点一下「标不懂」，
+            它立刻变黄，同时收进<b>不懂清单</b>，攒着等人问、等自己回头查。
+          </p>
+          <ul>
+            <li>选中一段点「标不懂」→ 包成 <code>==高亮==</code>，<b>预览里直接发黄</b></li>
+            <li>清单按笔记分组，<b>连着上下文片段一起列出来</b>，不用回头再找</li>
+            <li>弄明白了点「弄懂了」，它从清单里消失，<b>黄色高亮留着</b>——这地方曾经绊过你</li>
+            <li>没清完会在今日页和侧栏挂着数字，不会烂在列表深处</li>
+          </ul>
+        </div>
+        <div class="feat-shot land">
+          <div class="frame">
+            <picture><source media="(max-width: 700px)" srcset="shots/m-unknown.jpg" width="720" height="1558"><img src="shots/unknown.jpg" width="1560" height="1020" alt="不懂清单页：按笔记列出标了高亮的片段，每条右边有「弄懂了」按钮，顶部显示共几篇笔记几处高亮"></picture>
+          </div>
+          <div class="cap">等着被弄明白的东西，全在这一页。</div>
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="feat-copy">
+          <div class="kicker"><b>07</b> 检索</div>
+          <h3>找得到，比记得住更要紧</h3>
+          <p>
+            期末复习的时候，你只记得「老师讲过那个夹来夹去的东西」。
+            搜「夹逼」，两篇笔记立刻出来，按相关度排好。
+          </p>
+          <ul>
+            <li>全文搜索，标题命中权重更高，还带上下文片段</li>
+            <li><b>汉字之间多打空格也不影响</b>，粘贴的转写稿照样能搜</li>
+            <li>知识图谱把互相引用的笔记连成网，<b>哪篇是孤岛一眼看到</b></li>
+          </ul>
+        </div>
+        <div class="feat-shot">
+          <div class="frame">
+            <picture><source media="(max-width: 700px)" srcset="shots/m-graph.jpg" width="720" height="1558"><img src="shots/graph.jpg" width="1560" height="1020" alt="知识图谱：互相引用的笔记连成一张网，还没连上的笔记散在外圈"></picture>
+          </div>
+          <div class="cap">连在一起的是一章的知识，散在外面的还没整理。</div>
+        </div>
+      </div>
+
+      <div class="feat flip">
+        <div class="feat-copy">
+          <div class="kicker"><b>08</b> 分享</div>
+          <h3>发个链接，对方只看这一篇</h3>
+          <p>
+            课上没记全的，找同学对一下。生成一段链接发过去，对方打开只有这篇的内容，
+            不会看到你的其他笔记。
+          </p>
+          <ul>
+            <li>对方可以选择<b>存进自己的落字</b>，也可以只看不存</li>
+            <li>内容压在链接里，<b>不经过服务器</b></li>
+            <li>公式、双链、格式一起带过去</li>
+          </ul>
+        </div>
+        <div class="feat-shot phone">
+          <div class="frame">
+            <img src="shots/m-share.jpg" width="720" height="1558"
+                 alt="手机上打开分享链接：只读的笔记卡片，底部有「保存到我的笔记」按钮">
+          </div>
+          <div class="cap">对方看到的样子。</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 手机 ============ -->
+  <section class="mobile">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>手机上也能用，装到主屏就是一个 App</h2>
+        <p>上课只带手机的话，拍照、录音、翻课表都在手机上完成，回宿舍再接着写。</p>
+      </div>
+      <div class="phones">
+        <figure>
+          <div class="frame"><img src="shots/m-today.jpg" width="720" height="1558" alt="手机上的今日页"></div>
+          <figcaption>今天有什么课，还剩什么没整理</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="shots/m-schedule.jpg" width="720" height="1558" alt="手机上的课表"></div>
+          <figcaption>整周课表，按当周高亮</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="shots/m-notes.jpg" width="720" height="1558" alt="手机上的笔记列表"></div>
+          <figcaption>笔记列表，带缩略图和摘要</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 原则 ============ -->
+  <section class="principles" id="local">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>四条它守着的规矩</h2>
+        <p>课堂笔记是私人的东西，不该成为别人的数据。</p>
+      </div>
+      <div class="principle-grid">
+        <div class="pr-card">
+          <h4><span>1</span>不用注册</h4>
+          <p>打开就能用。没有账号、没有验证码、没有"绑定手机号才能导出"。</p>
+        </div>
+        <div class="pr-card">
+          <h4><span>2</span>不上传</h4>
+          <p>笔记、图片、录音、课件全存在浏览器的 IndexedDB 里。导入的 PPT 和 PDF 是在浏览器里就地解开的，整份文件不会离开这台设备。</p>
+        </div>
+        <div class="pr-card">
+          <h4><span>3</span>能离线</h4>
+          <p>装到桌面后，飞行模式也能打开、也能记。OCR、公式渲染、课件解析都在本地跑。</p>
+        </div>
+        <div class="pr-card">
+          <h4><span>4</span>能带走</h4>
+          <p>随时导出 ZIP（图片、转写原文都在里面）或 JSON 备份，换设备用备份恢复，不锁数据。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 安装 ============ -->
+  <section class="install" id="install">
+    <div class="wrap">
+      <div class="install-card">
+        <h2>把它装到桌面上</h2>
+        <p>
+          落字是个 PWA，不需要去应用商店，也不用下载安装包。
+          装完是一个独立窗口，跟普通软件一样从程序坞或主屏点开。
+        </p>
+        <div class="plats">
+          <div class="plat">
+            <div class="os">电脑 · Chrome / Edge</div>
+            <ol>
+              <li>点这一页的「装到桌面」</li>
+              <li>浏览器弹出安装框，点「安装」</li>
+              <li>从程序坞 / 开始菜单打开</li>
+            </ol>
+          </div>
+          <div class="plat">
+            <div class="os">iPhone / iPad · Safari</div>
+            <ol>
+              <li>用 Safari 打开这一页</li>
+              <li>点底部分享按钮</li>
+              <li>选「添加到主屏幕」</li>
+            </ol>
+          </div>
+          <div class="plat">
+            <div class="os">安卓 · Chrome</div>
+            <ol>
+              <li>打开这一页</li>
+              <li>点右上角三个点</li>
+              <li>选「安装应用」或「添加到主屏幕」</li>
+            </ol>
+          </div>
+        </div>
+        <div class="install-cta">
+          <button class="btn btn-primary" data-install>装到桌面</button>
+          <a class="btn btn-ghost" href="./app.html">不装，直接开始用 →</a>
+        </div>
+        <p class="install-note">
+          <b>装不上的话，直接用网页版就行，功能一模一样。</b>
+          Mac 上的 Safari 和 Firefox 不支持安装 PWA，点「不装，直接开始用」；
+          要装成桌面图标请用 Chrome 或 Edge。在微信里打开这一页的话，点右上角「…」→「在浏览器中打开」，再点安装按钮。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="wrap foot">
+    <span>落字 · LUOZI</span>
+    <span>·</span>
+    <span>数据存在本地，不经过服务器</span>
+    <div class="sp"></div>
+    <a href="./app.html">打开应用</a>
+    <a href="#install">安装</a>
+  </footer>
+
+</main>
+
+<div class="snack" id="snack"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // 老版本装好的应用，start_url 还指着 ./index.html（现在这一页是落地页）。
+  // 在独立窗口里打开说明用户要点的是「应用」，别让他停在介绍页，直接送进去。
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    location.replace('./app.html');
+  }
+
+  var deferred = null;
+  var snackEl = document.getElementById('snack');
+  var snackTimer = null;
+
+  function snack(msg, ms) {
+    if (!snackEl) return;
+    snackEl.textContent = msg;
+    snackEl.classList.add('on');
+    clearTimeout(snackTimer);
+    snackTimer = setTimeout(function () { snackEl.classList.remove('on'); }, ms || 4200);
+  }
+
+  function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+  }
+
+  function isIOS() {
+    var ua = navigator.userAgent;
+    return /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  }
+
+  // 微信内置浏览器装不了 PWA，必须先跳出去用系统浏览器
+  function isWeChat() {
+    return /MicroMessenger/i.test(navigator.userAgent);
+  }
+
+  function isSecure() {
+    return window.isSecureContext === true ||
+      location.protocol === 'https:' ||
+      location.hostname === 'localhost' ||
+      location.hostname === '127.0.0.1';
+  }
+
+  // ---- 安装入口 ----
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    document.querySelectorAll('[data-install]').forEach(function (b) {
+      if (isStandalone()) return;
+      b.textContent = '装到桌面';
+    });
+    var hint = document.getElementById('install-hint');
+    if (hint) hint.innerHTML = '浏览器已经准备好安装了，点上面的按钮，弹窗里选「安装」。';
+  });
+
+  window.addEventListener('appinstalled', function () {
+    deferred = null;
+    document.querySelectorAll('[data-install]').forEach(function (b) {
+      b.textContent = '打开落字';
+    });
+    var hint = document.getElementById('install-hint');
+    if (hint) hint.innerHTML = '已经装好了。<b>从程序坞或主屏点图标</b>就能直接打开。';
+    snack('安装完成，去程序坞里找「落字」');
+  });
+
+  document.querySelectorAll('[data-install]').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+      // 已经在独立窗口里跑，直接回应用
+      if (isStandalone()) {
+        location.href = './app.html';
+        return;
+      }
+      // 微信内置浏览器排在 deferred 前面：就算它给了 prompt，调起来也是白调
+      if (isWeChat()) {
+        snack('微信里装不了：点右上角「…」→「在浏览器中打开」，再点这个按钮。急用就点「不装，直接开始用」', 10000);
+        return;
+      }
+      if (deferred) {
+        var d = deferred;
+        deferred = null;
+        snack('正在打开安装窗口…', 2600);
+        d.prompt();
+        try {
+          var choice = await d.userChoice;
+          if (choice && choice.outcome === 'accepted') {
+            snack('正在安装…装好后从程序坞打开');
+          } else {
+            snack('取消了。想装的时候再点一次这个按钮就行');
+          }
+        } catch (e) {}
+        return;
+      }
+      if (isIOS()) {
+        snack('iPhone 上这样装：用 Safari 打开 → 点底部分享按钮 → 选「添加到主屏幕」', 9000);
+        return;
+      }
+      if (!isSecure()) {
+        snack('这个地址不能安装：浏览器要求 HTTPS 或本机地址。换成 https 链接再试', 7000);
+        return;
+      }
+      // 剩下的情况：浏览器还没给安装入口
+      snack('浏览器还没给出安装入口。用 Chrome 或 Edge 打开这一页，地址栏右侧会出现安装图标；也可能是已经装过了', 9000);
+    });
+  });
+
+  // ---- 顶栏投影 ----
+  var topbar = document.getElementById('topbar');
+  function onScroll() {
+    if (!topbar) return;
+    topbar.classList.toggle('stuck', window.scrollY > 8);
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // ---- 注册 Service Worker，落地页也要能离线打开 ----
+  if ('serviceWorker' in navigator && isSecure()) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+
+  // ---- 已经装过的话，把按钮文案改掉 ----
+  if (isStandalone()) {
+    document.querySelectorAll('[data-install]').forEach(function (b) {
+      b.textContent = '打开落字';
+    });
+  }
+})();
+</script>
+</body>
+</html>
