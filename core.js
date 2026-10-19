@@ -52,7 +52,7 @@
     },
     /** 每门课一个稳定的颜色，取自 hue 体系 */
     courseColor(seed) {
-      const palette = ['#3a5579', '#387476', '#7c5638', '#5f4576', '#69763e', '#875758', '#4a6b3f', '#7a4a63'];
+      const palette = ['#2f6e66', '#3a6285', '#7a5636', '#5d4a78', '#566b34', '#8a4f55', '#356b4c', '#6d4560'];
       let h = 0;
       const s = String(seed || '');
       for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973;

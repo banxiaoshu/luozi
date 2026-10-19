@@ -1169,7 +1169,7 @@
 
     h += '<div class="section-h"><h2>外观</h2></div>';
     h += '<div class="card"><div class="field"><label>主题色</label><div style="display:flex;gap:8px;flex-wrap:wrap">';
-    [[159, '林间'], [212, '海盐蓝'], [270, '暮光紫'], [26, '落日琥珀']].forEach(([hue, name]) => {
+    [[168, '豆青'], [212, '海盐蓝'], [270, '暮光紫'], [26, '落日琥珀']].forEach(([hue, name]) => {
       h += '<button class="chip' + (st.hue === hue ? ' on' : '') + '" data-act="set-hue" data-hue="' + hue + '">' +
         '<span style="width:10px;height:10px;border-radius:50%;background:hsl(' + hue + ' 45% 60%);display:inline-block"></span>' +
         name + '</button>';
@@ -2503,10 +2503,10 @@
     stage('db-ready');
     S.settings = await Settings.all();
     stage('settings');
-    document.documentElement.style.setProperty('--hue', S.settings.hue || 159);
+    document.documentElement.style.setProperty('--hue', S.settings.hue || 168);
 
     const themeMeta = document.querySelector('meta[name="theme-color"]');
-    if (themeMeta) themeMeta.setAttribute('content', '#0c1814');
+    if (themeMeta) themeMeta.setAttribute('content', '#cdd1d3');
 
     await refresh();
     stage('refreshed');

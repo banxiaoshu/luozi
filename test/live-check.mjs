@@ -1,7 +1,7 @@
 // 线上验收：直接打公网地址，用真 Chrome 确认「谁打开都能装/都能用」
 import { launch, newPage, connect, evaluate, sleep } from './cdp.mjs';
 
-const LIVE = 'https://luozi-notes.app.workbuddy.host/';
+const LIVE = process.env.LUOZI_URL || 'https://banxiaoshu.tech/';
 let pass = 0, fail = 0;
 const ok = (n, c, e) => { c ? (pass++, console.log('  ✓ ' + n + (e ? '  [' + e + ']' : ''))) : (fail++, console.log('  ✗ ' + n + (e ? '  [' + e + ']' : ''))); };
 

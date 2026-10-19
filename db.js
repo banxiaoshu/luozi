@@ -168,7 +168,7 @@
 
   /* ---------- 设置项（meta 仓的糖） ---------- */
   const DEFAULTS = {
-    hue: 159,
+    hue: 168,
     theme: 'auto',
     asrEngine: 'browser',      // browser | custom
     asrBaseUrl: '',
