@@ -283,6 +283,30 @@ a { color: inherit; text-decoration: none; }
 .install-cta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
 .install-cta .btn { margin: 0; }
 
+/* ---------------- 下载卡片 ---------------- */
+.dl {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  margin: 4px 0 14px;
+}
+.dl-card {
+  display: flex; flex-direction: column; gap: 3px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 13px; padding: 15px 16px 17px;
+  transition: border-color .18s, transform .18s, box-shadow .18s;
+}
+.dl-card:hover {
+  border-color: var(--mint); transform: translateY(-2px);
+  box-shadow: 0 14px 30px -18px rgba(29, 43, 40, .30);
+}
+.dl-os { font-size: 11px; letter-spacing: .1em; color: var(--mint-strong); font-weight: 600; }
+.dl-card b { font-size: 15.5px; font-weight: 650; color: var(--ink); }
+.dl-size { font-size: 11.5px; color: var(--faint); line-height: 1.6; }
+.dl-warn {
+  font-size: 12px; color: var(--muted); line-height: 1.85; margin: 0 0 26px;
+}
+.dl-warn b { color: var(--ink); font-weight: 600; }
+.dl-sub { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+
 /* ---------------- 页脚 ---------------- */
 .foot {
   border-top: 1px solid var(--line-soft); padding: 30px 0 44px;
@@ -320,6 +344,7 @@ a { color: inherit; text-decoration: none; }
   .mobile { display: none; }
   .principle-grid { grid-template-columns: 1fr; }
   .plats { grid-template-columns: 1fr; }
+  .dl { grid-template-columns: 1fr; }
   .phones { grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .topnav { display: none; }
   .topbar .wrap { height: 56px; }
@@ -657,11 +682,36 @@ a { color: inherit; text-decoration: none; }
   <section class="install" id="install">
     <div class="wrap">
       <div class="install-card">
-        <h2>把它装到桌面上</h2>
+        <h2>下载安装包</h2>
         <p>
-          落字是个 PWA，不需要去应用商店，也不用下载安装包。
-          装完是一个独立窗口，跟普通软件一样从程序坞或主屏点开。
+          不想装网页版的话，可以直接下安装包。三个平台是同一套代码，功能一样，
+          数据都只存在你自己的设备上。
         </p>
+        <div class="dl">
+          <a class="dl-card" href="download/luozi-1.4.0-mac-arm64.dmg" download>
+            <span class="dl-os">macOS</span>
+            <b>下载 .dmg</b>
+            <span class="dl-size">Apple 芯片（M 系列）· 95.8 MB</span>
+          </a>
+          <a class="dl-card" href="download/luozi-1.4.0-win-x64.exe" download>
+            <span class="dl-os">Windows</span>
+            <b>下载 .exe</b>
+            <span class="dl-size">64 位便携版，免安装 · 78.5 MB</span>
+          </a>
+          <a class="dl-card" href="download/luozi-1.4.0-android.apk" download>
+            <span class="dl-os">Android</span>
+            <b>下载 .apk</b>
+            <span class="dl-size">Android 6.0 及以上 · 13.3 MB</span>
+          </a>
+        </div>
+        <p class="dl-warn">
+          <b>第一次打开可能会被系统拦一下，属正常：</b>
+          macOS 要<b>右键图标 →「打开」</b>，不能双击（没买苹果开发者证书，双击会提示「无法验证开发者」）；
+          Windows 会弹 SmartScreen，点「更多信息」→「仍要运行」；
+          安卓需要在手机上允许「安装未知来源的应用」。Intel 芯片的 Mac 请用下面的网页版。
+        </p>
+
+        <div class="dl-sub">也可以不下载，直接用浏览器把它装成独立窗口：</div>
         <div class="plats">
           <div class="plat">
             <div class="os">电脑 · Chrome / Edge</div>
