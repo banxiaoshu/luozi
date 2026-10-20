@@ -1290,18 +1290,20 @@
     openSheet(
       '<div class="sheet-h"><h3>导入课表</h3><div class="sp"></div>' +
       '<button class="x-btn" data-act="close-sheet">×</button></div>' +
-      '<p class="sheet-sub">可以贴文字，也可以直接传一张教务系统课表截图。识别出来的文字会填进下面的框，你可以改完再解析。</p>' +
+      '<p class="sheet-sub">教务系统导出的课表 PDF 最省事，直接传就行。也可以传一张课表截图，或者把文字贴进来改完再解析。</p>' +
       '<div class="field"><label>粘贴课表文本</label>' +
       '<textarea class="textarea" id="import-text" style="min-height:150px;font-family:var(--mono);font-size:12.5px" ' +
       'placeholder="' + SAMPLE.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '"></textarea></div>' +
       '<div id="import-preview" style="font-size:12px;color:var(--muted);min-height:20px"></div>' +
       '<div class="sheet-foot">' +
+      '<button class="btn" data-act="pick-import-pdf">传课表 PDF</button>' +
       '<button class="btn" data-act="pick-import-shot">传课表截图</button>' +
       '<button class="btn" id="btn-fill-sample">填入示例</button>' +
       '<button class="btn" id="btn-parse">先解析看看</button>' +
       '<button class="btn btn-primary" id="btn-import-ok" disabled>确认导入</button>' +
       '</div>' +
-      '<input type="file" id="import-shot-input" accept="image/*" style="display:none">', true
+      '<input type="file" id="import-shot-input" accept="image/*" style="display:none">' +
+      '<input type="file" id="import-pdf-input" accept="application/pdf,.pdf" style="display:none">', true
     );
 
     let parsed = null;
@@ -1310,10 +1312,102 @@
     const okBtn = $('#btn-import-ok');
     const shotBtn = document.querySelector('[data-act="pick-import-shot"]');
     const shotInput = $('#import-shot-input');
+    const pdfBtn = document.querySelector('[data-act="pick-import-pdf"]');
+    const pdfInput = $('#import-pdf-input');
+
+    function renderPreview(p) {
+      parsed = p;
+      if (!p || !p.events.length) {
+        prevEl.innerHTML = '<span style="color:var(--danger)">没有解析出课程。</span>' +
+          (p && p.fromPdf ? '这份 PDF 里可能没有可提取的文字，换「传课表截图」试试。'
+                          : '检查一下每行是否包含「周几」。') +
+          (p && p.errors && p.errors.length ? '<br>' + U.esc(p.errors[0]) : '');
+        okBtn.disabled = true;
+        return;
+      }
+      let html = '<b style="color:var(--ink)">解析出 ' + p.events.length + ' 节课：</b><br>';
+      p.events.slice(0, 10).forEach((e) => {
+        const wk = (e.weeksFrom === 1 && e.weeksTo === 20) ? ''
+          : ' <span style="color:var(--faint)">' + e.weeksFrom + '-' + e.weeksTo + '周</span>';
+        html += '· ' + U.weekdayName(e.weekday) + ' ' + e.start + '-' + e.end + ' ' + U.esc(e.name) +
+          (e.room ? ' @' + U.esc(e.room) : '') + wk + '<br>';
+      });
+      if (p.events.length > 10) html += '… 还有 ' + (p.events.length - 10) + ' 节';
+      if (p.errors && p.errors.length) {
+        html += '<br><span style="color:var(--warn)">' + p.errors.length + ' 处没识别出来：' + U.esc(p.errors[0]) + '</span>';
+      }
+      if (p.ignored && p.ignored.length) {
+        html += '<br><span style="color:var(--faint)">另有 ' + p.ignored.length + ' 行是标题/表头，已自动忽略</span>';
+      }
+      prevEl.innerHTML = html;
+      okBtn.disabled = false;
+    }
 
     $('#btn-fill-sample').onclick = function () { textEl.value = SAMPLE; textEl.focus(); };
 
     shotBtn.onclick = function () { shotInput.click(); };
+
+    /* ---------- 传课表 PDF ----------
+       教务系统的课表把「星期几」编码成了列位置，纯文字里没有，
+       所以走 Docs.pdfLayout 拿到每块的坐标，交给 Timetable.parseGrid 按列切。 */
+    pdfBtn.onclick = function () { pdfInput.click(); };
+
+    pdfInput.onchange = async function () {
+      const file = pdfInput.files && pdfInput.files[0];
+      if (!file) return;
+      pdfBtn.disabled = true;
+      okBtn.disabled = true;
+      prevEl.textContent = '正在读 PDF…';
+      try {
+        const layout = await Docs.pdfLayout(file, function (done, total) {
+          prevEl.textContent = '正在读 PDF：第 ' + done + '/' + total + ' 页';
+        });
+
+        let p = Timetable.parseGrid(layout.pages);
+        let how = p.events.length ? 'pdf' : '';
+
+        // 没有表格结构（比如导出成一整段文字），退回按行解析
+        if (!how) {
+          const doc = await Docs.readPdf(file);
+          const txt = doc.pages.map(function (pg) {
+            return (pg.title ? pg.title + '\n' : '') + pg.lines.join('\n');
+          }).join('\n');
+          const p2 = Timetable.parse(txt);
+          if (p2.events.length) { p = p2; how = 'text'; }
+        }
+
+        // 还是不行：多半是扫描件，把前几页画成图走本地识别
+        if (!how) {
+          prevEl.innerHTML = '这份 PDF 里没有文字层（扫描件），正在转成图片识别…';
+          const blobs = await Docs.pdfPagesToBlobs(file, 3);
+          for (const b of blobs) {
+            const t = await Media.OCR.recognize(b.blob, function (st, pr) {
+              prevEl.textContent = '识别第 ' + b.no + ' 页：' + st + ' ' + Math.round((pr || 0) * 100) + '%';
+            });
+            const p3 = Timetable.parse(normalizeOcrText(t));
+            if (p3.events.length) { p = p3; how = 'ocr'; break; }
+          }
+        }
+
+        if (!how) {
+          renderPreview({ events: [], errors: [], ignored: [], fromPdf: true });
+          return;
+        }
+
+        p.fromPdf = (how === 'pdf');
+        if (how === 'pdf') {
+          prevEl.innerHTML = '<span style="color:var(--faint)">PDF 里的课表已按表格直接解析，不用再点「先解析看看」。</span>';
+        }
+        renderPreview(p);
+      } catch (e) {
+        prevEl.innerHTML = '<span style="color:var(--danger)">读不了这份 PDF：' + U.esc((e && e.message) || e) +
+          '</span>。如果它是加密的，先在教务系统里重新导出一次。';
+        okBtn.disabled = true;
+      } finally {
+        pdfBtn.disabled = false;
+        pdfInput.value = '';
+      }
+    };
 
     shotInput.onchange = async function () {
       const file = shotInput.files && shotInput.files[0];
@@ -1341,28 +1435,12 @@
     };
 
     $('#btn-parse').onclick = function () {
-      const p = Timetable.parse(textEl.value);
-      parsed = p;
-      if (!p.events.length) {
-        prevEl.innerHTML = '<span style="color:var(--danger)">没有解析出课程。检查一下每行是否包含「周几」。</span>' +
-          (p.errors.length ? '<br>' + U.esc(p.errors[0]) : '');
-        okBtn.disabled = true;
+      // PDF 已经按表格解析过了，文本框是空的，别把好结果冲掉
+      if (!textEl.value.trim() && parsed && parsed.fromPdf) {
+        renderPreview(parsed);
         return;
       }
-      let html = '<b style="color:var(--ink)">解析出 ' + p.events.length + ' 节课：</b><br>';
-      p.events.slice(0, 8).forEach((e) => {
-        html += '· ' + U.weekdayName(e.weekday) + ' ' + e.start + '-' + e.end + ' ' + U.esc(e.name) +
-          (e.room ? ' @' + U.esc(e.room) : '') + '<br>';
-      });
-      if (p.events.length > 8) html += '… 还有 ' + (p.events.length - 8) + ' 节';
-      if (p.errors.length) {
-        html += '<br><span style="color:var(--warn)">' + p.errors.length + ' 行没识别出来：' + U.esc(p.errors[0]) + '</span>';
-      }
-      if (p.ignored && p.ignored.length) {
-        html += '<br><span style="color:var(--faint)">另有 ' + p.ignored.length + ' 行是标题/表头，已自动忽略</span>';
-      }
-      prevEl.innerHTML = html;
-      okBtn.disabled = false;
+      renderPreview(Timetable.parse(textEl.value));
     };
 
     okBtn.onclick = async function () {

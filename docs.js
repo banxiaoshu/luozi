@@ -174,6 +174,19 @@
 
   let pdfLibPromise = null;
 
+  /**
+   * pdfjs 的 worker 里解析 cMapUrl / standardFontDataUrl 是相对 worker 自己的
+   * 地址来的，传相对路径会被二次拼接成 vendor/pdfjs/vendor/pdfjs/…。
+   * 必须给绝对 URL，否则中文 PDF 用的 CID 字体解不出来，文字层直接变空。
+   */
+  function pdfAsset(rel) {
+    try {
+      return new URL(rel, document.baseURI).href;
+    } catch (e) {
+      return rel;
+    }
+  }
+
   function loadPdfjs() {
     if (global.pdfjsLib) return Promise.resolve(global.pdfjsLib);
     if (pdfLibPromise) return pdfLibPromise;
@@ -223,7 +236,7 @@
     const data = new Uint8Array(await file.arrayBuffer());
     const doc = await lib.getDocument({
       data: data,
-      cMapUrl: 'vendor/pdfjs/cmaps/',
+      cMapUrl: pdfAsset('vendor/pdfjs/cmaps/'),
       cMapPacked: true,
       // 不用额外字体包，够抽文字就行
       disableFontFace: true,
@@ -244,11 +257,53 @@
     return { kind: 'pdf', pages: pages, count: pages.length, chars: chars };
   };
 
+  /**
+   * 保留坐标的 PDF 文字抽取 —— 课表要用。
+   *
+   * `readPdf` 把每页压成若干行，行内的列关系就没了；而课表里「星期几」
+   * 不是文字，是靠单元格的横坐标表达的，所以必须拿到每个文字块的 x/y。
+   * 坐标已经过 viewport 变换，等于「页面上看到的位置」，页面旋转也一并处理掉了。
+   *
+   * @returns {{pages:{no:number,width:number,height:number,items:{text:string,x:number,y:number,h:number}[]}[]}}
+   */
+  Docs.pdfLayout = async function (file, onProgress) {
+    const lib = await loadPdfjs();
+    const data = new Uint8Array(await file.arrayBuffer());
+    const doc = await lib.getDocument({
+      data: data,
+      cMapUrl: pdfAsset('vendor/pdfjs/cmaps/'),
+      cMapPacked: true,
+      disableFontFace: true,
+      isEvalSupported: false
+    }).promise;
+
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const vp = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      const items = [];
+      for (const it of content.items) {
+        if (typeof it.str !== 'string') continue;
+        const text = it.str.trim();
+        if (!text) continue;
+        // 文本矩阵 → 视口矩阵，旋转页也能拿到正确方向
+        const tr = lib.Util.transform(vp.transform, it.transform);
+        const h = Math.hypot(tr[2], tr[3]) || it.height || 10;
+        items.push({ text: text, x: tr[4], y: tr[5], h: h });
+      }
+      pages.push({ no: i, width: vp.width, height: vp.height, items: items });
+      if (onProgress) onProgress(i, doc.numPages);
+    }
+    await doc.destroy();
+    return { pages: pages };
+  };
+
   /** 扫描件兜底：把前 n 页画成图，交给本地 OCR */
   Docs.pdfPagesToBlobs = async function (file, maxPages) {
     const lib = await loadPdfjs();
     const data = new Uint8Array(await file.arrayBuffer());
-    const doc = await lib.getDocument({ data: data, cMapUrl: 'vendor/pdfjs/cmaps/', cMapPacked: true }).promise;
+    const doc = await lib.getDocument({ data: data, cMapUrl: pdfAsset('vendor/pdfjs/cmaps/'), cMapPacked: true }).promise;
     const n = Math.min(maxPages || 5, doc.numPages);
     const out = [];
     for (let i = 1; i <= n; i++) {

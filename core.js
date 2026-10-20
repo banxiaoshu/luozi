@@ -628,6 +628,187 @@
       return { events: events, errors: errors, ignored: ignored };
     },
 
+    /* ---------------- 表格型课表（教务系统导出的 PDF） ---------------- */
+
+    /**
+     * 解析带坐标的文字块。
+     *
+     * 教务系统导出的课表里，「星期几」根本不是文字，而是靠单元格的横坐标
+     * 表达的。所以纯文本解析拿不到星期，必须按 x 分列；同一列里多门课
+     * 纵向堆叠，再用「(N-M节)」这个开头把它们切开。
+     *
+     * @param {Array} pages Docs.pdfLayout 返回的 pages
+     */
+    parseGrid(pages) {
+      const events = [];
+      const errors = [];
+      const ignored = [];
+      let columns = 0;
+
+      const WD_RE = /^(?:星期|周)([一二三四五六日天])$/;
+      // 上一门课详情被折行后的尾巴。判断「往上找课程名」什么时候该停。
+      const TAIL_RE = /^[:：]|^(学时|学分|教师|师|场地|组成|成[:：]|课备注|选课备注|教学班|考核方式|重修标记|周学时|总学时)|^[）)]|^[（(][普\d]|^[\/;,；，、]|教学班|BKL\d|^\d\)/;
+      const TIME_RE = /^(上午|下午|晚上|中午|早|晚)$/;
+
+      let lastTable = null;   // 跨页的续表没有表头，沿用上一页的列
+
+      (pages || []).forEach(function (pg) {
+        const all = ((pg && pg.items) || []).filter(function (it) {
+          return it && it.text && String(it.text).trim();
+        });
+        if (!all.length) return;
+
+        /* ① 表头「星期一…星期日」；续页没有表头，沿用上一页的列 */
+        const found = [];
+        all.forEach(function (it) {
+          const m = String(it.text).replace(/\s+/g, '').match(WD_RE);
+          if (!m) return;
+          const wd = Timetable.WEEKDAY_MAP[m[1]] || 0;
+          if (!wd) return;
+          if (found.some(function (h) { return h.wd === wd; })) return;
+          found.push({ wd: wd, x: it.x, y: it.y });
+        });
+
+        let heads, bounds, headY;
+        if (found.length >= 3) {
+          heads = found.slice().sort(function (a, b) { return a.x - b.x; });
+
+          /* ② 列边界：相邻表头取中点；第一列的左边界靠「节次」卡住 */
+          bounds = [];
+          const hourLabels = all.filter(function (it) {
+            return /^(节次|时间段)$/.test(String(it.text).replace(/\s+/g, '')) && it.x < heads[0].x;
+          });
+          if (hourLabels.length) {
+            const hx = Math.max.apply(null, hourLabels.map(function (h) { return h.x; }));
+            bounds.push((hx + heads[0].x) / 2);
+          } else {
+            bounds.push(heads[0].x - 60);
+          }
+          for (let i = 1; i < heads.length; i++) {
+            bounds.push((heads[i - 1].x + heads[i].x) / 2);
+          }
+          bounds.push(Infinity);
+          headY = Math.min.apply(null, heads.map(function (h) { return h.y; }));
+          lastTable = { heads: heads, bounds: bounds };
+          columns = Math.max(columns, heads.length);
+        } else if (lastTable) {
+          heads = lastTable.heads;
+          bounds = lastTable.bounds;
+          headY = -Infinity;      // 续页没有表头，不用这条线过滤
+        } else {
+          return;                 // 真不是表格，交给调用方走别的路
+        }
+
+        const cols = heads.map(function () { return []; });
+
+        all.forEach(function (it) {
+          const t = String(it.text).trim();
+          if (/^\d{1,2}$/.test(t)) return;                 // 节次序号，不是课
+          if (/^(节次|时间段|上午|下午|晚上|中午)$/.test(t)) return;
+          if (WD_RE.test(t.replace(/\s+/g, ''))) return;    // 表头本身
+          if (it.y <= headY + 1) return;                    // 表头以上的标题行
+          for (let i = 0; i < heads.length; i++) {
+            if (it.x >= bounds[i] && it.x < bounds[i + 1]) { cols[i].push(it); return; }
+          }
+        });
+
+        /* ③ 每列按 y 排序，用「(N-M节)」切块 */
+        const START_RE = /^[（(]\s*(\d{1,2})\s*[-–—~至]\s*(\d{1,2})\s*节\s*[）)]/;
+        cols.forEach(function (items, ci) {
+          if (!items.length) return;
+          items.sort(function (a, b) { return a.y - b.y; });
+
+          const marks = [];
+          items.forEach(function (it, idx) {
+            if (START_RE.test(String(it.text).trim())) marks.push(idx);
+          });
+          if (!marks.length) {
+            ignored.push(U.weekdayName(heads[ci].wd) + ' 那一列没找到「第几节」，跳过 ' +
+              items.length + ' 段文字');
+            return;
+          }
+
+          // 课程名可能折成两三行，先算出每门课「名字从哪一行开始」
+          const nameStart = marks.map(function (mi) {
+            let from = mi;
+            let n = mi - 1;
+            let taken = 0;
+            while (n >= 0 && taken < 3) {
+              const t = String(items[n].text).trim();
+              // 课程名里不会有冒号；带冒号的一律是上一门课的详情尾巴
+              if (/[：:]/.test(t) || TAIL_RE.test(t) || TIME_RE.test(t) || /^\d{1,2}$/.test(t)) break;
+              from = n;
+              n--;
+              taken++;
+            }
+            return from;
+          });
+
+          marks.forEach(function (mi, k) {
+            const stop = k + 1 < marks.length ? nameStart[k + 1] : items.length;
+            let name = '';
+            for (let i = nameStart[k]; i < mi; i++) name += String(items[i].text);
+            let body = '';
+            for (let i = mi; i < stop; i++) body += String(items[i].text);
+
+            const one = Timetable.fromBlock(heads[ci].wd, name, body);
+            if (one) events.push(one);
+            else errors.push(U.weekdayName(heads[ci].wd) + ' 有一块没认出来：' +
+              (name || body).slice(0, 24));
+          });
+        });
+      });
+
+      return { events: events, errors: errors, ignored: ignored, columns: columns };
+    },
+
+    /** 从一块课程文字里抽字段。PDF 里是「场地:xxx/教师:yyy」这种明确结构，不用猜。 */
+    fromBlock(weekday, rawName, body) {
+      const text = String(body || '');
+      const pm = text.match(/^[（(]\s*(\d{1,2})\s*[-–—~至]\s*(\d{1,2})\s*节/);
+      if (!pm) return null;
+      const r = Timetable.slotRangeToTime(+pm[1], +pm[2]);
+
+      let weeksFrom = 1, weeksTo = 20;
+      const wm = text.match(/(\d{1,2})\s*[-–—~]\s*(\d{1,2})\s*周/);
+      if (wm) { weeksFrom = +wm[1]; weeksTo = +wm[2]; }
+
+      const rm = text.match(/场地[:：]\s*([^\/]+)/);
+      const tm = text.match(/教师[:：]\s*([^\/]+)/);
+
+      const name = Timetable.cleanName(rawName);
+      if (!name) return null;
+
+      return {
+        weekday: weekday,
+        start: r.start,
+        end: r.end,
+        name: name,
+        room: rm ? Timetable.cleanRoom(rm[1]) : '',
+        teacher: tm ? tm[1].trim().slice(0, 12) : '',
+        weeksFrom: weeksFrom,
+        weeksTo: weeksTo,
+        raw: (name + ' ' + text).slice(0, 300)
+      };
+    },
+
+    /** 「知源楼北（N216）」→「知源楼北(N216)」 */
+    cleanRoom(s) {
+      return String(s || '')
+        .replace(/[（]/g, '(').replace(/[）]/g, ')')
+        .replace(/\s+/g, '')
+        .replace(/^.*?校区[:：]?/, '')
+        .slice(0, 24);
+    },
+
+    /** 课程名去掉 ★ ◇ 这类标记 */
+    cleanName(s) {
+      return String(s || '')
+        .replace(/[\s\u3000]+/g, '')
+        .replace(/[★☆◇◆※*]/g, '')
+        .slice(0, 24);
+    },
+
     /** 把解析结果落库：同名课程合并，分配颜色 */
     async persist(parsed) {
       const existingCourses = await DB.all('courses');

@@ -100,6 +100,74 @@ t('搜索能命中并排序', () => {
 t('搜索空词返回空', () => Search.run([{ id: '1', title: 'x', body: 'y' }], '').length === 0);
 t('搜索摘要命中关键词', () => Search.run([{ id: '1', title: 't', body: '夹逼定理很好用' }], '夹逼')[0].snippet.indexOf('夹逼') > -1);
 
+// ---- 课表 PDF（表格型，星期几靠列坐标表达） ----
+const cell = (text, x, y) => ({ text, x, y, h: 9 });
+const headRow = (y) => [
+  cell('节次', 69, y), cell('星期一', 133, y), cell('星期二', 256, y),
+  cell('星期三', 361, y), cell('星期四', 466, y), cell('星期五', 566, y)
+];
+const pageOf = (items) => ({ no: 1, width: 842, height: 595, items });
+
+t('PDF 课表：按横坐标分出星期', () => {
+  const p = pageOf(headRow(63).concat([
+    cell('政治经济学★', 104, 82),
+    cell('(1-2节)4-12周/校区:临沂校区/场地:弘文楼北（N216）/教师:刘敏/学分:2', 104, 94),
+    cell('高等数学B上★', 208, 82),
+    cell('(1-2节)4-16周/校区:临沂校区/场地:知源楼西(W204)/教师:冯宝成/学分:5', 208, 94)
+  ]));
+  const r = Timetable.parseGrid([p]);
+  return r.events.length === 2 &&
+    r.events[0].weekday === 1 && r.events[0].name === '政治经济学' &&
+    r.events[0].room === '弘文楼北(N216)' &&
+    r.events[1].weekday === 2 && r.events[1].name === '高等数学B上' &&
+    r.events[1].start === '08:00' && r.events[1].end === '09:40';
+});
+
+t('PDF 课表：折行的课程名要拼起来', () => {
+  const p = pageOf(headRow(63).concat([
+    cell('习近平新时代中国特色', 104, 168),
+    cell('社会主义思想概论★', 104, 181),
+    cell('(5-6节)4-16周/校区:临沂校区/场地:知源楼东(E201)/教师:谢明伟', 104, 194)
+  ]));
+  const r = Timetable.parseGrid([p]);
+  return r.events.length === 1 &&
+    r.events[0].name === '习近平新时代中国特色社会主义思想概论' &&
+    r.events[0].start === '11:40' && r.events[0].room === '知源楼东(E201)';
+});
+
+t('PDF 课表：续页没有表头，沿用上一页的列', () => {
+  const p1 = pageOf(headRow(63).concat([
+    cell('经济法★', 104, 82),
+    cell('(1-2节)4-16周/场地:弘文楼北(N203)/教师:居珊', 104, 94)
+  ]));
+  const p2 = pageOf([
+    cell('高等数学B上★', 104, 82),
+    cell('(7-8节)4-17周/场地:知源楼西(W204)/教师:冯宝成', 104, 94)
+  ]);
+  const r = Timetable.parseGrid([p1, p2]);
+  return r.events.length === 2 &&
+    r.events[1].name === '高等数学B上' && r.events[1].weekday === 1 &&
+    r.events[1].start === '13:30';
+});
+
+t('PDF 课表：上一门课的详情尾巴不会被当成课程名', () => {
+  const p = pageOf(headRow(63).concat([
+    cell('政治经济学★', 104, 82),
+    cell('(1-2节)4-12周/场地:弘文楼北(N216)/重修标记:', 104, 94),
+    cell('军事理论课★', 104, 411),
+    cell('(3-4节)4-12周/场地:知源楼西(W204)', 104, 423)
+  ]));
+  const r = Timetable.parseGrid([p]);
+  return r.events.length === 2 &&
+    r.events[0].name === '政治经济学' && r.events[1].name === '军事理论课' &&
+    r.events[1].start === '09:50';
+});
+
+t('PDF 不是表格时不硬解析（交给调用方回退）', () => {
+  const r = Timetable.parseGrid([pageOf([cell('就是一整段普通文字', 100, 100)])]);
+  return r.events.length === 0 && r.columns === 0;
+});
+
 // ---- U ----
 t('weekOf 第 1 周', () => {
   const w = U.weekOf(U.today(), 20);
