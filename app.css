@@ -456,11 +456,16 @@ a { color: var(--mint-ink); text-decoration: none; }
 /* ================= 移动端底栏 ================= */
 .tabbar {
   display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 150;
-  height: 58px; padding: 0 6px calc(0px + env(safe-area-inset-bottom, 0px));
+  /* 高度不能写死：写死 height 时 border-box 会把 padding-bottom 从内容高度里扣掉，
+     .inner 的固定高度就会溢出盒子底边，标签被屏幕下沿切掉。
+     所以用 height:auto，把安全区和留白都放在 padding 上。 */
+  height: auto;
+  padding: 0 6px 14px;
+  padding: 0 6px calc(14px + env(safe-area-inset-bottom, 0px));
   background: rgba(241, 243, 244, .94); backdrop-filter: blur(18px);
   border-top: 1px solid var(--line);
 }
-.tabbar .inner { display: flex; height: 58px; }
+.tabbar .inner { display: flex; height: 56px; }
 .tab-btn {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 2px; font-size: 10px; color: var(--faint); border-radius: 10px; position: relative;
@@ -475,7 +480,7 @@ a { color: var(--mint-ink); text-decoration: none; }
 .tab-btn.active { color: var(--mint-ink); }
 
 .fab {
-  display: none; position: fixed; right: 18px; bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  display: none; position: fixed; right: 18px; bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   z-index: 160; width: 52px; height: 52px; border-radius: 18px;
   background: var(--mint); color: var(--on-accent); font-size: 22px;
   box-shadow: 0 10px 26px rgba(29, 43, 40, .22); place-items: center;
@@ -498,7 +503,9 @@ a { color: var(--mint-ink); text-decoration: none; }
   .topbar h1 { font-size: 15px; }
   .search-box { min-width: 0; flex: 1; }
   .search-box kbd { display: none; }
-  .view { padding: 16px 14px 132px; }
+  /* 底部留白要同时躲开底部导航（56+14）和悬浮按钮（84+52），
+     少一点就会在滚到底时被悬浮按钮压住最后一行 */
+  .view { padding: 16px 14px 156px; }
   .tabbar { display: block; }
   .tab-btn { font-size: 9.5px; }
   .tab-btn .ico { font-size: 16px; }
@@ -520,7 +527,7 @@ a { color: var(--mint-ink); text-decoration: none; }
   .rec-time { font-size: 34px; }
   .capture-grid { grid-template-columns: repeat(2, 1fr); }
   .btn { height: 34px; padding: 0 12px; font-size: 12.5px; }
-  .toast { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); font-size: 13px; }
+  .toast { bottom: calc(88px + env(safe-area-inset-bottom, 0px)); font-size: 13px; }
   .row { padding: 10px 12px; }
 }
 
