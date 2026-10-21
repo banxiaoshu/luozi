@@ -1290,7 +1290,7 @@
     openSheet(
       '<div class="sheet-h"><h3>导入课表</h3><div class="sp"></div>' +
       '<button class="x-btn" data-act="close-sheet">×</button></div>' +
-      '<p class="sheet-sub">教务系统导出的课表 PDF 最省事，直接传就行。也可以传一张课表截图，或者把文字贴进来改完再解析。</p>' +
+      '<p class="sheet-sub">教务系统里打开课表，全选复制，直接粘到下面的框里就行（表格的行列会按原样解析）。也可以传导出的 PDF、传课表截图，或者把文字贴进来改完再解析。</p>' +
       '<div class="field"><label>粘贴课表文本</label>' +
       '<textarea class="textarea" id="import-text" style="min-height:150px;font-family:var(--mono);font-size:12.5px" ' +
       'placeholder="' + SAMPLE.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '"></textarea></div>' +
@@ -1434,9 +1434,33 @@
       }
     };
 
+    /* ---------- 从教务系统直接粘贴课表 ----------
+       教务系统要登录，我们不碰它。但课表页是张 HTML 表格，
+       复制时剪贴板里带 text/html，把行列还原出来就能直接建课表。 */
+    let lastAutoFill = '';
+    textEl.addEventListener('paste', function (e) {
+      const cd = e.clipboardData;
+      if (!cd) return;
+      const html = cd.getData('text/html');
+      if (!html) return;
+      const layout = Docs.tableToLayout(html);
+      if (!layout) return;                      // 不是课表表格，走正常粘贴
+      e.preventDefault();
+      const p = Timetable.parseGrid(layout.pages);
+      if (!p.events.length) {
+        toast('粘贴的表格里没认出课程，试试「传课表 PDF」', true);
+        return;
+      }
+      p.fromGrid = true;
+      lastAutoFill = cd.getData('text/plain') || '';
+      textEl.value = lastAutoFill;
+      prevEl.innerHTML = '<span style="color:var(--faint)">已经从复制的表格里按行列解析好，不用再点「先解析看看」。</span>';
+      renderPreview(p);
+    });
+
     $('#btn-parse').onclick = function () {
-      // PDF 已经按表格解析过了，文本框是空的，别把好结果冲掉
-      if (!textEl.value.trim() && parsed && parsed.fromPdf) {
+      // PDF / 表格已经解析过了，文本框没被改过就别把好结果冲掉
+      if (parsed && (parsed.fromPdf || parsed.fromGrid) && textEl.value === lastAutoFill) {
         renderPreview(parsed);
         return;
       }
@@ -1650,17 +1674,36 @@
     setTimeout(() => { const t = $('#ed-body-input'); if (t) t.focus(); }, 120);
   }
 
+  /** 读音频时长（拿不到就返回 0，不影响保存） */
+  function audioFileDuration(file) {
+    return new Promise(function (resolve) {
+      let done = false;
+      const finish = function (v) { if (!done) { done = true; resolve(v); } };
+      try {
+        const url = URL.createObjectURL(file);
+        const a = document.createElement('audio');
+        a.preload = 'metadata';
+        a.onloadedmetadata = function () {
+          const d = isFinite(a.duration) ? Math.round(a.duration) : 0;
+          URL.revokeObjectURL(url);
+          finish(d);
+        };
+        a.onerror = function () { URL.revokeObjectURL(url); finish(0); };
+        a.src = url;
+        // 某些格式读不出 metadata，别让面板一直卡着
+        setTimeout(function () { finish(0); }, 3000);
+      } catch (e) { finish(0); }
+    });
+  }
+
   function openRecorder(targetNoteId) {
-    if (!Media.Recorder.supported()) {
-      toast('这个浏览器不支持录音', true);
-      return;
-    }
-    if (S.rec) { toast('已经在录音了'); return; }
+    if (S.rec && S.rec.state !== 'idle') { toast('已经在录音了'); return; }
 
     openSheet(
       '<div class="sheet-h"><h3>录音</h3><div class="sp"></div>' +
       '<button class="x-btn" data-act="close-sheet">×</button></div>' +
-      '<p class="sheet-sub">录音前请获得老师或参与者同意。音频只存在这台设备上。</p>' +
+      '<p class="sheet-sub">录音前请获得老师或参与者同意。音频只存在这台设备上。' +
+      '手机里已有的录音也能直接传进来。</p>' +
       '<div class="rec-panel">' +
       '<div class="rec-time" id="rec-time">00:00</div>' +
       '<div class="wave" id="rec-wave"></div>' +
@@ -1669,8 +1712,12 @@
       '<button class="btn" id="rec-pause" disabled>暂停</button>' +
       '<button class="btn" id="rec-cancel" disabled>取消</button>' +
       '</div>' +
+      '<div class="rec-actions">' +
+      '<button class="btn btn-sm btn-ghost" id="rec-pick">传一个已有的录音文件</button>' +
+      '</div>' +
       '<div id="rec-status" style="font-size:12px;color:var(--muted)"></div>' +
-      '</div>'
+      '</div>' +
+      '<input type="file" id="rec-file" accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.amr,.webm" style="display:none">'
     );
 
     const waveEl = $('#rec-wave');
@@ -1698,6 +1745,10 @@
     $('#rec-toggle').onclick = async function () {
       const btn = this;
       if (rec.state === 'idle') {
+        if (!Media.Recorder.supported()) {
+          toast('这个浏览器不能录音，点下面的「传一个已有的录音文件」', true);
+          return;
+        }
         try {
           await rec.start();
           btn.textContent = '停止并保存';
@@ -1723,8 +1774,49 @@
     };
 
     $('#rec-pause').onclick = function () {
-      if (rec.state === 'recording') { rec.pause(); this.textContent = '继续'; $('#rec-status').textContent = '已暂停'; }
-      else if (rec.state === 'paused') { rec.resume(); this.textContent = '暂停'; $('#rec-status').textContent = '录音中'; }
+      const pauseBtn = this;
+      const timeEl = $('#rec-time');
+      if (rec.state === 'recording') {
+        const before = rec.elapsed();
+        rec.pause();
+        if (rec.state !== 'paused') { toast('这个浏览器不支持暂停', true); return; }
+        pauseBtn.textContent = '继续';
+        // 计时要停在暂停那一刻，不能继续往上走
+        if (timeEl) timeEl.textContent = Media.fmtTime(before);
+        $('#rec-status').textContent = '已暂停，再点一次继续';
+      } else if (rec.state === 'paused') {
+        rec.resume();
+        pauseBtn.textContent = '暂停';
+        $('#rec-status').innerHTML = '<span class="rec-dot" style="display:inline-block;vertical-align:middle"></span> 录音中';
+      }
+    };
+
+    /* 传一个已有的录音文件（手机录音机录的 m4a、微信转出来的 mp3 都行） */
+    const recFile = $('#rec-file');
+    $('#rec-pick').onclick = function () { recFile.click(); };
+    recFile.onchange = async function () {
+      const f = recFile.files && recFile.files[0];
+      if (!f) return;
+      if (rec.state !== 'idle') { toast('先把正在进行的录音停掉', true); recFile.value = ''; return; }
+      const pickBtn = $('#rec-pick');
+      pickBtn.disabled = true;
+      pickBtn.textContent = '正在读时长…';
+      try {
+        const dur = await audioFileDuration(f);
+        closeSheet();
+        await afterRecord({
+          blob: f,
+          mime: f.type || 'audio/mpeg',
+          duration: dur,
+          levels: []
+        }, targetNoteId);
+      } catch (e) {
+        toast('加不进去：' + e.message, true);
+        pickBtn.disabled = false;
+        pickBtn.textContent = '传一个已有的录音文件';
+      } finally {
+        recFile.value = '';
+      }
     };
 
     $('#rec-cancel').onclick = function () {

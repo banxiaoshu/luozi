@@ -154,6 +154,13 @@
         return '\u0000IM' + (inlineMath.length - 1) + '\u0000';
       });
 
+      /* 5.5 高亮 ==还没弄懂== → 黄色标记
+         必须放在双链/链接之前：那两条规则会生成 <a class="..." data-wikilink="...">
+         这种自带等号的 HTML，之后再匹配 ==...== 就会卡在等号上。
+         内容里允许出现单个等号（==lim a_n = L==），只要求不成对。 */
+      text = text.replace(/＝＝([^\n]+?)＝＝/g, '==$1==');   // 全角等号也认
+      text = text.replace(/==([^\n]+?)==/g, '<mark class="md-mark">$1</mark>');
+
       /* 6. 双链 [[标题]] 或 [[标题|别名]] */
       if (wikilink) {
         text = text.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, function (_, target, alias) {
@@ -166,12 +173,10 @@
       text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
         '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
-      /* 8. 粗体、斜体、删除线、高亮 */
+      /* 8. 粗体、斜体、删除线（高亮已在 5.5 处理） */
       text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
       text = text.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
       text = text.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
-      // ==还没弄懂的地方== → 黄色高亮，同时会被「不懂清单」收进去
-      text = text.replace(/==([^=\n]+)==/g, '<mark class="md-mark">$1</mark>');
 
       /* 9. 块级：逐行状态机 */
       const lines = text.split('\n');
@@ -277,7 +282,7 @@
         .replace(/\$\$[\s\S]*?\$\$/g, ' ')
         // 行内公式：不整段删掉，换成能读的符号，摘要有意义
         .replace(/\$([^$\n]+)\$/g, function (_, tex) { return MD.mathToText(tex); })
-        .replace(/==([^=\n]+)==/g, '$1')     // 高亮标记不留在摘要里
+        .replace(/==([^\n]+?)==/g, '$1')     // 高亮标记不留在摘要里
         .replace(/[*_~`#\[\]()]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -336,7 +341,7 @@
     /** 抽出正文里所有 ==高亮== 的片段，给「不懂清单」用 */
     markSnippets(src) {
       const out = [];
-      const re = /==([^=\n]+)==/g;
+      const re = /==([^\n]+?)==/g;
       let m;
       while ((m = re.exec(String(src || ''))) !== null) {
         const t = m[1].trim();

@@ -38,6 +38,9 @@
       this.startedAt = 0;
       this.mime = '';
       this.state = 'idle';    // idle | recording | paused
+      this.pausedAt = 0;      // 这一次暂停开始的时刻
+      this.pausedMs = 0;      // 累计暂停了多久
+      this._tick = null;      // 波形循环，暂停时要能停下来
     }
 
     static supported() {
@@ -60,6 +63,8 @@
       this.mime = pickMime();
       this.chunks = [];
       this.levels = [];
+      this.pausedAt = 0;
+      this.pausedMs = 0;
       this.rec = new MediaRecorder(this.stream, this.mime ? { mimeType: this.mime, audioBitsPerSecond: 64000 } : undefined);
 
       this.rec.ondataavailable = (e) => {
@@ -80,7 +85,8 @@
         src.connect(this.analyser);
         const buf = new Uint8Array(this.analyser.frequencyBinCount);
         const tick = () => {
-          if (!this.analyser) return;
+          // 只在自己还在录的时候跑；暂停时循环已经被 cancel 掉了
+          if (!this.analyser || this.state === 'paused') return;
           this.analyser.getByteFrequencyData(buf);
           let sum = 0;
           for (let i = 0; i < buf.length; i++) sum += buf[i];
@@ -90,7 +96,7 @@
           this.onLevel(rms, this.elapsed());
           this.raf = requestAnimationFrame(tick);
         };
-        tick();
+        this._tick = tick;
       } catch (e) {
         // 没有 WebAudio 也能录，只是没有波形
       }
@@ -98,29 +104,39 @@
       this.rec.start(1000);
       this.startedAt = Date.now();
       this.state = 'recording';
+      // 状态置好之后再起波形循环，否则 tick 里的守卫会把它直接掐掉
+      if (this._tick && !this.raf) this.raf = requestAnimationFrame(this._tick);
       return true;
     }
 
     pause() {
-      if (this.state === 'recording' && this.rec) {
-        this.rec.pause();
-        this.state = 'paused';
-      }
+      if (this.state !== 'recording' || !this.rec) return;
+      try { this.rec.pause(); } catch (e) {}
+      this.state = 'paused';
+      this.pausedAt = Date.now();
+      // 光暂停 MediaRecorder 不够：波形还在跳、计时还在走，看着像一直在录
+      if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
     }
 
     resume() {
-      if (this.state === 'paused' && this.rec) {
-        this.rec.resume();
-        this.state = 'recording';
-      }
+      if (this.state !== 'paused' || !this.rec) return;
+      try { this.rec.resume(); } catch (e) {}
+      if (this.pausedAt) { this.pausedMs += Date.now() - this.pausedAt; this.pausedAt = 0; }
+      this.state = 'recording';
+      if (this._tick && !this.raf) this.raf = requestAnimationFrame(this._tick);
     }
 
+    /** 已经录了多久（不含暂停的时间） */
     elapsed() {
-      return this.startedAt ? Math.floor((Date.now() - this.startedAt) / 1000) : 0;
+      if (!this.startedAt) return 0;
+      const now = Date.now();
+      const held = this.pausedMs + (this.pausedAt ? now - this.pausedAt : 0);
+      return Math.max(0, Math.floor((now - this.startedAt - held) / 1000));
     }
 
     _teardown() {
       if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
+      this._tick = null;
       if (this.ctx) { try { this.ctx.close(); } catch (e) {} this.ctx = null; }
       this.analyser = null;
       if (this.stream) {
@@ -142,6 +158,8 @@
           this.rec = null;
           this.state = 'idle';
           this.startedAt = 0;
+          this.pausedAt = 0;
+          this.pausedMs = 0;
           resolve({ blob: blob, mime: mime, duration: duration, levels: levels });
         };
         try { this.rec.stop(); } catch (e) { this._teardown(); this.state = 'idle'; reject(e); }
@@ -157,6 +175,8 @@
       this.rec = null;
       this.state = 'idle';
       this.startedAt = 0;
+      this.pausedAt = 0;
+      this.pausedMs = 0;
     }
   }
 

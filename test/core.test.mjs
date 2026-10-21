@@ -168,6 +168,22 @@ t('PDF 不是表格时不硬解析（交给调用方回退）', () => {
   return r.events.length === 0 && r.columns === 0;
 });
 
+// ---- 不懂标记 ==高亮== ----
+t('高亮：普通片段', () => MD.render('先记==还没弄懂==再说').indexOf('<mark') > -1);
+t('高亮：内容里带等号（数学式子）', () => {
+  const h = MD.render('==lim a_n = L== 这一步没懂');
+  return h.indexOf('<mark') > -1 && h.indexOf('lim a_n = L') > -1;
+});
+t('高亮：包住双链', () => {
+  const h = MD.render('==看[[重要极限]]==' );
+  return h.indexOf('<mark') > -1 && h.indexOf('wikilink') > -1;
+});
+t('高亮：全角等号也认', () => MD.render('＝＝全角＝＝').indexOf('<mark') > -1);
+t('不懂清单能收到带等号的片段', () => {
+  const s = MD.markSnippets('==a = b== 和 ==另一处==');
+  return s.length === 2 && s[0] === 'a = b';
+});
+
 // ---- U ----
 t('weekOf 第 1 周', () => {
   const w = U.weekOf(U.today(), 20);

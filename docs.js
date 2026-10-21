@@ -299,6 +299,109 @@
     return { pages: pages };
   };
 
+  /**
+   * 把「从教务系统复制过来的课表表格」转成带坐标的文字块，喂给 Timetable.parseGrid。
+   *
+   * 教务系统要登录，纯本地应用不去抓它。但课表页本身就是一张 HTML 表格，
+   * 用户 Ctrl+A / Ctrl+C 复制时，剪贴板里带着 text/html。这里把表格还原成
+   * 行列网格，列号就是星期几，比截图和 PDF 都准（rowspan/colspan 也能解）。
+   *
+   * @param {string} html 剪贴板里的 text/html
+   * @returns {{pages:Array}|null} 没找到课表表格时返回 null
+   */
+  Docs.tableToLayout = function (html) {
+    if (typeof DOMParser === 'undefined') return null;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const tables = Array.prototype.slice.call(doc.querySelectorAll('table'));
+    if (!tables.length) return null;
+
+    const WD = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 7, '天': 7 };
+
+    // 挑「星期」表头出现得最多的那张表
+    let best = null;
+    tables.forEach(function (tb) {
+      const txt = tb.textContent || '';
+      const hits = (txt.match(/星期[一二三四五六日天]/g) || []).length;
+      if (!best || hits > best.hits) best = { tb: tb, hits: hits };
+    });
+    if (!best || best.hits < 3) return null;
+
+    const rows = Array.prototype.slice.call(best.tb.querySelectorAll('tr'));
+    if (!rows.length) return null;
+
+    // 先铺网格，处理 rowspan / colspan
+    const grid = [];
+    rows.forEach(function (tr, r) {
+      if (!grid[r]) grid[r] = [];
+      let c = 0;
+      Array.prototype.slice.call(tr.children).forEach(function (td) {
+        if (!/^(TD|TH)$/.test(td.tagName)) return;
+        while (grid[r][c]) c++;                       // 被上面的 rowspan 占掉了
+        const cs = Math.max(1, parseInt(td.getAttribute('colspan') || '1', 10));
+        const rs = Math.max(1, parseInt(td.getAttribute('rowspan') || '1', 10));
+        const text = (td.innerText || td.textContent || '').replace(/\s+/g, ' ').trim();
+        for (let dr = 0; dr < rs; dr++) {
+          if (!grid[r + dr]) grid[r + dr] = [];
+          for (let dc = 0; dc < cs; dc++) grid[r + dr][c + dc] = { text: text, head: dr === 0 && dc === 0 };
+        }
+        c += cs;
+      });
+    });
+
+    // 找表头那一行（星期几）
+    let headRow = -1;
+    const colWeekday = {};
+    for (let r = 0; r < grid.length && headRow < 0; r++) {
+      let hits = 0;
+      (grid[r] || []).forEach(function (cell, c) {
+        if (!cell) return;
+        const m = String(cell.text).match(/^星期([一二三四五六日天])$/) ||
+                  String(cell.text).match(/^周([一二三四五六日天])$/);
+        if (m) { colWeekday[c] = WD[m[1]] || 0; hits++; }
+      });
+      if (hits >= 3) headRow = r;
+    }
+    if (headRow < 0) return null;
+
+    /* 造一份「假坐标」文字块：x 用列号、y 用行号，单位放大避免挤在一起。
+       parseGrid 只认相对位置，所以这样喂进去就能直接复用。 */
+    const X = 1000, Y = 400;
+    const items = [];
+    Object.keys(colWeekday).forEach(function (c) {
+      items.push({ text: '星期' + ['', '一', '二', '三', '四', '五', '六', '日'][colWeekday[c]],
+                   x: Number(c) * X, y: headRow * Y, h: 10 });
+    });
+
+    for (let r = headRow + 1; r < grid.length; r++) {
+      (grid[r] || []).forEach(function (cell, c) {
+        if (!cell || !cell.head) return;
+        if (!colWeekday[c]) return;
+        const text = String(cell.text || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+
+        // 单元格形如「高等数学B上 (1-2节)4-16周/场地:…」，
+        // parseGrid 要求课程名单独一行，所以在「(N-M节)」处拆成两块
+        const m = text.match(/[（(]\s*(\d{1,2})\s*[-–—~至]\s*(\d{1,2})\s*节/);
+        if (m) {
+          const idx = text.indexOf(m[0]);
+          const name = text.slice(0, idx).trim();
+          if (name) items.push({ text: name, x: c * X, y: r * Y - 40, h: 10 });
+          items.push({ text: text.slice(idx), x: c * X, y: r * Y, h: 10 });
+        } else {
+          // 没有节次的格子（比如只写了教室），原样给过去当详情尾巴
+          items.push({ text: text, x: c * X, y: r * Y, h: 10 });
+        }
+      });
+    }
+
+    // 补一个「节次」表头，让 parseGrid 知道第一列左边界在哪
+    items.push({ text: '节次', x: 0, y: headRow * Y, h: 10 });
+
+    return {
+      pages: [{ no: 1, width: 7000, height: grid.length * Y, items: items }]
+    };
+  };
+
   /** 扫描件兜底：把前 n 页画成图，交给本地 OCR */
   Docs.pdfPagesToBlobs = async function (file, maxPages) {
     const lib = await loadPdfjs();
